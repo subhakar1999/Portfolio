@@ -224,7 +224,7 @@ export const HeroSection: React.FC<Props> = ({ personaMode, onSelectPersona, onO
             
             {/* The 3D Interactive Canvas Frame Player */}
             <InteractiveFramePlayer
-              className="h-[380px] sm:h-[460px] lg:h-[500px] w-full"
+              className="h-[260px] sm:h-[400px] lg:h-[480px] w-full"
               isHero={true}
             />
 

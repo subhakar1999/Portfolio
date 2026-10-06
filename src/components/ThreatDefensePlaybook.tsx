@@ -179,7 +179,7 @@ export const ThreatDefensePlaybook: React.FC = () => {
           </div>
 
           {/* 4 Interactive Orchestration Nodes */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center">
             
             {/* Step 0: Defender Signal */}
             <div className={`p-3 rounded-xl border transition-all duration-300 ${

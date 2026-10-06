@@ -290,7 +290,7 @@ export const LiveTerminal: React.FC<Props> = ({ isOpen, onClose }) => {
     >
       <div 
         className={`bg-dark-950 border border-cyan-500/40 rounded-2xl shadow-2xl flex flex-col font-mono overflow-hidden transition-all duration-300 ${
-          isMaximized ? 'w-full h-full' : 'max-w-4xl w-full h-[580px]'
+          isMaximized ? 'w-full h-full' : 'max-w-4xl w-full h-[88vh] sm:h-[580px]'
         }`}
         onClick={(e) => e.stopPropagation()}
       >

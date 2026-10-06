@@ -25,7 +25,9 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
   const [playSpeed, setPlaySpeed] = useState<number>(1);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [startX, setStartX] = useState<number>(0);
+  const [startY, setStartY] = useState<number>(0);
   const [startFrame, setStartFrame] = useState<number>(1);
+  const [isTouchHorizontal, setIsTouchHorizontal] = useState<boolean>(false);
   const [hudActive, setHudActive] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
@@ -121,7 +123,7 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
     }
   }, []);
 
-  // Resize canvas
+  // Resize canvas with mobile-optimized DPR cap
   useEffect(() => {
     const handleResize = () => {
       const canvas = canvasRef.current;
@@ -129,10 +131,11 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
       if (!canvas || !container) return;
 
       const rect = container.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Cap DPR to 1.5 on mobile to conserve memory and maintain smooth 60fps
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
 
@@ -171,7 +174,7 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
     return () => cancelAnimationFrame(animId);
   }, [isPlaying, playSpeed, renderFrame, onFrameChange]);
 
-  // Direct Interactive Drag to Rotate on Canvas
+  // Direct Interactive Drag to Rotate on Canvas (Mouse)
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     setIsPlaying(false);
@@ -197,31 +200,50 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
     setIsDragging(false);
   };
 
-  // Touch handlers for mobile drag
+  // Touch handlers for mobile (Allows smooth vertical page scrolling while enabling horizontal 3D rotation)
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
-      setIsDragging(true);
-      setIsPlaying(false);
       setStartX(e.touches[0].clientX);
+      setStartY(e.touches[0].clientY);
       setStartFrame(currentFrame);
+      setIsDragging(false);
+      setIsTouchHorizontal(false);
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length !== 1) return;
-    const dx = e.touches[0].clientX - startX;
-    const sensitivity = 0.5;
-    const frameDelta = Math.floor(dx * sensitivity);
-    let newFrame = ((startFrame + frameDelta - 1) % TOTAL_FRAMES + TOTAL_FRAMES) % TOTAL_FRAMES + 1;
-    if (newFrame !== currentFrame) {
-      setCurrentFrame(newFrame);
-      renderFrame(newFrame);
-      if (onFrameChange) onFrameChange(newFrame);
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+
+    // Detect if user is intentionally swiping horizontally to rotate
+    if (!isDragging && !isTouchHorizontal) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+        setIsDragging(true);
+        setIsTouchHorizontal(true);
+        setIsPlaying(false);
+      } else if (Math.abs(dy) > 8) {
+        // Vertical scroll gesture - let browser handle page scroll normally
+        return;
+      }
+    }
+
+    if (isDragging) {
+      const sensitivity = 0.5;
+      const frameDelta = Math.floor(dx * sensitivity);
+      let newFrame = ((startFrame + frameDelta - 1) % TOTAL_FRAMES + TOTAL_FRAMES) % TOTAL_FRAMES + 1;
+      if (newFrame !== currentFrame) {
+        setCurrentFrame(newFrame);
+        renderFrame(newFrame);
+        if (onFrameChange) onFrameChange(newFrame);
+      }
     }
   };
 
   const handleTouchEnd = () => {
     setIsDragging(false);
+    setIsTouchHorizontal(false);
   };
 
   // Slider Scrub
@@ -254,7 +276,7 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative group select-none overflow-hidden rounded-2xl border border-cyan-500/30 bg-dark-900/90 shadow-2xl backdrop-blur-xl ${className} ${
+      className={`relative group select-none overflow-hidden rounded-2xl border border-cyan-500/30 bg-dark-900/90 shadow-2xl backdrop-blur-xl touch-pan-y ${className} ${
         isFullscreen ? 'fixed inset-0 z-50 rounded-none border-none' : ''
       }`}
       onMouseDown={handleMouseDown}
@@ -264,7 +286,7 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+      style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'pan-y' }}
     >
       {/* 3D Canvas */}
       <canvas
@@ -277,10 +299,10 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
       <div className="absolute inset-0 pointer-events-none scanline-overlay opacity-25" />
 
       {/* Futuristic Corner Accents */}
-      <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-cyan-400 pointer-events-none" />
-      <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-cyan-400 pointer-events-none" />
-      <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-cyan-400 pointer-events-none" />
-      <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-cyan-400 pointer-events-none" />
+      <div className="absolute top-3 left-3 w-3 sm:w-4 h-3 sm:h-4 border-t-2 border-l-2 border-cyan-400 pointer-events-none" />
+      <div className="absolute top-3 right-3 w-3 sm:w-4 h-3 sm:h-4 border-t-2 border-r-2 border-cyan-400 pointer-events-none" />
+      <div className="absolute bottom-3 left-3 w-3 sm:w-4 h-3 sm:h-4 border-b-2 border-l-2 border-cyan-400 pointer-events-none" />
+      <div className="absolute bottom-3 right-3 w-3 sm:w-4 h-3 sm:h-4 border-b-2 border-r-2 border-cyan-400 pointer-events-none" />
 
       {/* Loading Progress Bar */}
       {loadPercentage < 100 && (
@@ -294,35 +316,35 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
 
       {/* Interactive HUD Header */}
       {hudActive && (
-        <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-none">
-          <div className="flex items-center space-x-2 bg-dark-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-cyan-500/30 text-xs font-mono">
+        <div className="absolute top-3 sm:top-4 left-3 sm:left-4 right-3 sm:right-4 flex items-center justify-between z-20 pointer-events-none">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 bg-dark-900/80 backdrop-blur-md px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-cyan-500/30 text-[10px] sm:text-xs font-mono">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
             </span>
             <span className="text-cyan-300 font-semibold tracking-wider">
-              {isPlaying ? 'PLAYING (24 FPS)' : 'PAUSED (MANUAL)'}
+              {isPlaying ? '24 FPS' : 'PAUSED'}
             </span>
             <span className="text-slate-500">|</span>
-            <span className="text-slate-300">{angleDeg}° AZIMUTH</span>
+            <span className="text-slate-300">{angleDeg}°</span>
           </div>
 
-          <div className="hidden sm:flex items-center space-x-2 bg-dark-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-xs font-mono text-slate-300">
-            <Activity className="w-3.5 h-3.5 text-emerald-400" />
-            <span>FRAME: <strong className="text-cyan-400">{String(currentFrame).padStart(3, '0')}</strong>/{TOTAL_FRAMES}</span>
+          <div className="flex items-center space-x-2 bg-dark-900/80 backdrop-blur-md px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-white/10 text-[10px] sm:text-xs font-mono text-slate-300">
+            <Activity className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
+            <span><strong className="text-cyan-400">{String(currentFrame).padStart(3, '0')}</strong>/{TOTAL_FRAMES}</span>
           </div>
         </div>
       )}
 
-      {/* Floating Interactive HUD Tags */}
+      {/* Floating Interactive HUD Tags on larger screens */}
       {hudActive && (
         <>
-          <div className="absolute top-1/4 left-6 pointer-events-none hidden md:flex items-center space-x-2 bg-dark-950/80 border border-cyan-500/30 px-3 py-1 rounded-md text-[11px] font-mono text-cyan-300 backdrop-blur-sm shadow-lg">
+          <div className="absolute top-1/4 left-6 pointer-events-none hidden lg:flex items-center space-x-2 bg-dark-950/80 border border-cyan-500/30 px-3 py-1 rounded-md text-[11px] font-mono text-cyan-300 backdrop-blur-sm shadow-lg">
             <Shield className="w-3.5 h-3.5 text-cyan-400" />
             <span>AZURE CLOUD DEFENDER</span>
           </div>
 
-          <div className="absolute bottom-1/3 right-6 pointer-events-none hidden md:flex items-center space-x-2 bg-dark-950/80 border border-amber-500/30 px-3 py-1 rounded-md text-[11px] font-mono text-amber-300 backdrop-blur-sm shadow-lg">
+          <div className="absolute bottom-1/3 right-6 pointer-events-none hidden lg:flex items-center space-x-2 bg-dark-950/80 border border-amber-500/30 px-3 py-1 rounded-md text-[11px] font-mono text-amber-300 backdrop-blur-sm shadow-lg">
             <Cpu className="w-3.5 h-3.5 text-amber-400" />
             <span>AWS LANDING ZONE IaC</span>
           </div>
@@ -331,47 +353,46 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
 
       {/* Interactive Control Dock at Bottom */}
       <div 
-        className="absolute bottom-4 left-4 right-4 z-20 flex flex-col sm:flex-row items-center gap-3 bg-dark-950/85 backdrop-blur-xl p-2.5 rounded-xl border border-white/10 shadow-2xl transition-all duration-300 opacity-90 group-hover:opacity-100"
+        className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 right-3 sm:right-4 z-20 flex flex-col sm:flex-row items-center gap-2 sm:gap-3 bg-dark-950/85 backdrop-blur-xl p-2 sm:p-2.5 rounded-xl border border-white/10 shadow-2xl transition-all duration-300 opacity-95 group-hover:opacity-100"
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >
-        {/* Play/Pause & Speed */}
-        <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-start">
-          <button
-            onClick={togglePlay}
-            aria-label={isPlaying ? "Pause 3D orbit" : "Play 3D orbit"}
-            className="flex items-center justify-center w-9 h-9 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition-colors shadow-sm"
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 translate-x-0.5" />}
-          </button>
+        {/* Play/Pause & Speed & Scrub row on mobile */}
+        <div className="flex items-center justify-between w-full space-x-2">
+          <div className="flex items-center space-x-1.5">
+            <button
+              onClick={togglePlay}
+              aria-label={isPlaying ? "Pause 3D orbit" : "Play 3D orbit"}
+              className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition-colors shadow-sm"
+            >
+              {isPlaying ? <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 translate-x-0.5" />}
+            </button>
 
-          <button
-            onClick={() => {
-              sound.click();
-              setPlaySpeed((prev) => (prev === 1 ? 2 : prev === 2 ? 0.5 : 1));
-            }}
-            className="px-2.5 py-1 text-xs font-mono rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-colors"
-          >
-            {playSpeed}x SPD
-          </button>
+            <button
+              onClick={() => {
+                sound.click();
+                setPlaySpeed((prev) => (prev === 1 ? 2 : prev === 2 ? 0.5 : 1));
+              }}
+              className="px-2 py-1 text-[11px] sm:text-xs font-mono rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-colors"
+            >
+              {playSpeed}x
+            </button>
 
-          <button
-            onClick={() => {
-              sound.click();
-              setCurrentFrame(1);
-              renderFrame(1);
-            }}
-            title="Reset to frame 1"
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
-          >
-            <RotateCw className="w-4 h-4" />
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                sound.click();
+                setCurrentFrame(1);
+                renderFrame(1);
+              }}
+              title="Reset to frame 1"
+              className="p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              <RotateCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          </div>
 
-        {/* Scrub Slider */}
-        <div className="flex-1 flex items-center space-x-3 w-full px-1">
-          <span className="text-[10px] font-mono text-slate-400">01</span>
-          <div className="relative flex-1 flex items-center">
+          {/* Scrub Slider */}
+          <div className="flex-1 flex items-center space-x-2 px-1">
             <input
               type="range"
               min="1"
@@ -381,30 +402,14 @@ export const InteractiveFramePlayer: React.FC<Props> = ({
               className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400"
             />
           </div>
-          <span className="text-[10px] font-mono text-slate-400">192</span>
-        </div>
 
-        {/* HUD and Fullscreen */}
-        <div className="flex items-center space-x-1.5 justify-end w-full sm:w-auto">
-          <button
-            onClick={() => {
-              sound.click();
-              setHudActive((prev) => !prev);
-            }}
-            className={`p-2 rounded-lg text-xs font-mono transition-colors ${
-              hudActive ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-slate-400'
-            }`}
-            title="Toggle HUD Telemetry"
-          >
-            <Sparkles className="w-4 h-4" />
-          </button>
-
+          {/* Fullscreen */}
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
+            className="p-1.5 sm:p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors shrink-0"
             title="Toggle Fullscreen"
           >
-            <Maximize2 className="w-4 h-4" />
+            <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </div>
